@@ -1,0 +1,86 @@
+[project]
+name = "umesh"
+version = "0.1.0"
+description = "Some utilities for working with vtkUnstructuredGrid objects and files (VTK/VTU)"
+authors = [
+    {name = "Panos Mavrogiorgos",email = "pmav99@gmail.com"}
+]
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "multifutures[loky]",
+    "numpy",
+    "pandas",
+    "pyproj",
+    "tqdm",
+    "vtk (>9.4)",
+    "cyclopts",
+]
+
+[build-system]
+requires = ["poetry-core>=2.0.0,<3.0.0"]
+build-backend = "poetry.core.masonry.api"
+
+# pyproject.toml
+[project.scripts]
+umesh = "umesh.__main__:app"
+
+[tool.poetry.scripts]
+vtk2vtu = "umesh._cli:vtk2vtu"
+
+[tool.poetry.group.dev.dependencies]
+basedpyright = "*"
+ipykernel = "*"
+ipython = "*"
+line-profiler = "*"
+logfmter = "*"
+microsoft-python-type-stubs = {git = "https://github.com/microsoft/python-type-stubs.git"}
+mypy = "*"
+pandas-stubs = "*"
+pytest = "*"
+pytest-cov = "*"
+pyvista = "*"
+scipy-stubs = "*"
+types-geopandas = "*"
+types-shapely = "*"
+types-tqdm = "*"
+
+
+[tool.pytest.ini_options]
+addopts = "-ra --verbose --showlocals --tb=short"
+testpaths = ["tests"]
+log_cli = true
+filterwarnings = [
+    'ignore:distutils Version classes are deprecated. Use packaging.version instead:DeprecationWarning',
+    'ignore:Deprecated call to `pkg_resources.declare_namespace:DeprecationWarning',
+]
+
+[tool.coverage.run]
+plugins = []
+source = ["umesh"]
+omit = []
+concurrency = [
+  "multiprocessing",
+  "thread",
+]
+parallel = true
+sigterm = true
+
+[tool.coverage.report]
+fail_under = 75
+exclude_also = [
+    'def __repr__',
+    'if self\\.debug:',
+    'if settings\\.DEBUG',
+    'raise AssertionError',
+    'raise NotImplementedError',
+    'if 0:',
+    'if __name__ == .__main__.:',
+    'if TYPE_CHECKING:',
+    'if T\.TYPE_CHECKING:',
+    'class .*\bProtocol\):',
+    '@(abc\.)?abstractmethod',
+]
+
+[tool.coverage.html]
+directory = "coverage_html_report"
