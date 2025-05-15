@@ -1,5 +1,6 @@
 # pyright: reportUnknownMemberType=false
 # pyright: reportUnknownVariableType=false
+# pyright: reportUnknownArgumentType=false
 from __future__ import annotations
 
 import dataclasses
@@ -26,6 +27,8 @@ from vtkmodules.vtkIOLegacy import vtkUnstructuredGridReader
 from vtkmodules.vtkIOLegacy import vtkUnstructuredGridWriter
 from vtkmodules.vtkIOXML import vtkXMLUnstructuredGridReader
 from vtkmodules.vtkIOXML import vtkXMLUnstructuredGridWriter
+
+from ._utils import parse_gr3
 # from vtkmodules.vtkFiltersExtraction import vtkExtractUnstructuredGrid
 
 if T.TYPE_CHECKING:
@@ -434,6 +437,36 @@ def reproject(
     _ = string_data.InsertNextValue(to_crs.to_wkt())
     ugrid.field_data.AddArray(string_data)
     return ugrid
+
+
+def gr3_to_vtu(
+    filename: Path,
+    output: Path,
+    variable: str,
+    include_boundaries: bool,
+) -> None:
+    parsed = parse_gr3(filename=filename, include_boundaries=include_boundaries)
+    ugrid = to_vtk_unstructured_grid(
+        points=np.c_[parsed["nodes"][:, :2], np.zeros(len(parsed["nodes"]))],
+        triangles=parsed["elements"],
+        point_data={variable: parsed["nodes"][:, 2]},
+    )
+    write_vtu(ugrid=ugrid, filename=output)
+
+
+def gr3_append_point_data(
+    filename: Path,
+    output: Path,
+    variable: str,
+) -> None:
+    ugrid = read_vtu(output)
+    parsed = parse_gr3(filename=filename, include_boundaries=False)
+
+    vtk_point_array = numpy_to_vtk(parsed["nodes"][:, 2])
+    vtk_point_array.SetName(variable)
+    _ = ugrid.GetPointData().AddArray(vtk_point_array)
+
+    write_vtu(ugrid, filename=output)
 
 
 # def ugrid_histogram(
