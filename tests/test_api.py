@@ -6,15 +6,16 @@ import pathlib
 import numpy as np
 import pyproj
 import pytest
+from vtkmodules.util.numpy_support import vtk_to_numpy
 from vtkmodules.vtkCommonDataModel import vtkUnstructuredGrid
 
 from umesh import calc_mesh_quality
 from umesh import clip
+from umesh import create_ugrid
 from umesh import read
 from umesh import read_vtk
 from umesh import read_vtu
 from umesh import reproject
-from umesh import to_vtk_unstructured_grid
 from umesh import to_vtu
 from umesh import write_vtk
 from umesh import write_vtu
@@ -110,12 +111,53 @@ triangles = np.array(
         pytest.param(triangles[:, 1:], id="triangles_without_type_id"),
     ],
 )
-def test_to_vtk_triangles_without_type_id(triangles):
-    ugrid = to_vtk_unstructured_grid(points, triangles)
+def test_create_ugrid_with_triangles(triangles):
+    ugrid = create_ugrid(points, triangles)
     assert isinstance(ugrid, vtkUnstructuredGrid)
     assert len(ugrid.points) == 4
     assert len(ugrid.cells["cell_types"]) == 2
     assert (ugrid.cells["cell_types"] == 5).all()
+
+
+def test_create_ugrid_with_data():
+    key1 = "aaa"
+    key2 = "bbb"
+    arr1 = np.random.random(len(points))
+    arr2 = np.random.random(len(triangles))
+    ugrid = create_ugrid(
+        points,
+        triangles,
+        point_data={key1: arr1},
+        cell_data={key2: arr2},
+        field_data={key1: arr1, key2: arr2},
+    )
+    assert isinstance(ugrid, vtkUnstructuredGrid)
+    assert len(ugrid.points) == 4
+    assert len(ugrid.cells["cell_types"]) == 2
+    assert (ugrid.cells["cell_types"] == 5).all()
+    assert ugrid.field_data.keys() == [key1, key2]
+    # point_data
+    assert np.equal(arr1, vtk_to_numpy(ugrid.point_data[key1])).all()
+    # cell_data
+    assert np.equal(arr2, vtk_to_numpy(ugrid.cell_data[key2])).all()
+    # field_data
+    assert np.equal(arr1, vtk_to_numpy(ugrid.field_data[key1])).all()
+    assert np.equal(arr2, vtk_to_numpy(ugrid.field_data[key2])).all()
+
+
+def test_create_ugrid_point_data():
+    key1 = "aaa"
+    key2 = "bbb"
+    arr1 = np.array([1, 2, 3])
+    arr2 = np.array([4, 9, 5, 1])
+    ugrid = create_ugrid(points, triangles, field_data={key1: arr1, key2: arr2})
+    assert isinstance(ugrid, vtkUnstructuredGrid)
+    assert len(ugrid.points) == 4
+    assert len(ugrid.cells["cell_types"]) == 2
+    assert (ugrid.cells["cell_types"] == 5).all()
+    assert ugrid.field_data.keys() == [key1, key2]
+    assert np.equal(arr1, vtk_to_numpy(ugrid.field_data[key1])).all()
+    assert np.equal(arr2, vtk_to_numpy(ugrid.field_data[key2])).all()
 
 
 def test_read_vtk():

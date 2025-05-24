@@ -13,7 +13,7 @@ from ._api import read
 from ._api import read_vtk
 from ._api import read_vtu
 from ._api import reproject
-from ._api import to_vtk_unstructured_grid
+from ._api import create_ugrid
 from ._api import to_vtu
 from ._api import write_vtk
 from ._api import write_vtu
@@ -29,7 +29,7 @@ __all__ = (
     "read_vtk",
     "read_vtu",
     "reproject",
-    "to_vtk_unstructured_grid",
+    "create_ugrid",
     "to_vtu",
     "write_vtk",
     "write_vtu",

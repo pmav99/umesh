@@ -160,7 +160,7 @@ DEFAULT_DATA_MODE = VTKDataModeType.BINARY
 ALL_VTK_TRIANGLE_METRICS = tuple(VTK_TRIANGLE_METRICS)
 
 
-def to_vtk_unstructured_grid(
+def create_ugrid(
     points: NPArrayF,
     triangles: NPArrayI,
     point_data: dict[str, NPArrayF] | None = None,
@@ -446,7 +446,7 @@ def gr3_to_vtu(
     include_boundaries: bool,
 ) -> None:
     parsed = parse_gr3(filename=filename, include_boundaries=include_boundaries)
-    ugrid = to_vtk_unstructured_grid(
+    ugrid = create_ugrid(
         points=np.c_[parsed["nodes"][:, :2], np.zeros(len(parsed["nodes"]))],
         triangles=parsed["elements"],
         point_data={variable: parsed["nodes"][:, 2]},
