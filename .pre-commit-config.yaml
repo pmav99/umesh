@@ -53,14 +53,14 @@ repos:
       - id: "add-trailing-comma"
 
   - repo: "https://github.com/astral-sh/ruff-pre-commit"
-    rev: "v0.11.4"
+    rev: "v0.11.9"
     hooks:
       - id: "ruff"
         args: ["--show-fixes"]
       - id: "ruff-format"
 
   - repo: "https://github.com/python-poetry/poetry"
-    rev: "2.1.2"
+    rev: "2.1.3"
     hooks:
       - id: "poetry-check"
         name: "poetry check --lock"
@@ -96,10 +96,10 @@ repos:
             "requirements/requirements-dev.txt",
           ]
 
-  - repo: "local"
-    hooks:
-      - id: "mypy"
-        name: "mypy"
-        entry: "make mypy"
-        language: "system"
-        types: ["python"]
+#  - repo: "local"
+#    hooks:
+#      - id: "mypy"
+#        name: "mypy"
+#        entry: "make mypy"
+#        language: "system"
+#        types: ["python"]

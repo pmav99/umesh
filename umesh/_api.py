@@ -17,10 +17,12 @@ from vtkmodules.util.numpy_support import numpy_to_vtkIdTypeArray
 from vtkmodules.util.numpy_support import vtk_to_numpy
 from vtkmodules.vtkCommonCore import vtkPoints
 from vtkmodules.vtkCommonCore import vtkStringArray
+from vtkmodules.vtkCommonDataModel import VTK_LINE
 from vtkmodules.vtkCommonDataModel import VTK_TRIANGLE
 from vtkmodules.vtkCommonDataModel import vtkBox
 from vtkmodules.vtkCommonDataModel import vtkCellArray
 from vtkmodules.vtkCommonDataModel import vtkUnstructuredGrid
+from vtkmodules.vtkFiltersExtraction import vtkExtractCellsByType
 from vtkmodules.vtkFiltersExtraction import vtkExtractGeometry
 from vtkmodules.vtkFiltersVerdict import vtkMeshQuality
 from vtkmodules.vtkIOLegacy import vtkUnstructuredGridReader
@@ -28,7 +30,9 @@ from vtkmodules.vtkIOLegacy import vtkUnstructuredGridWriter
 from vtkmodules.vtkIOXML import vtkXMLUnstructuredGridReader
 from vtkmodules.vtkIOXML import vtkXMLUnstructuredGridWriter
 
+from ._utils import get_boundary_edges
 from ._utils import parse_gr3
+from ._utils import write_gr3
 # from vtkmodules.vtkFiltersExtraction import vtkExtractUnstructuredGrid
 
 if T.TYPE_CHECKING:
@@ -40,6 +44,10 @@ if T.TYPE_CHECKING:
     Path = os.PathLike[str] | str
     NPArrayF = npt.NDArray[np.float64]
     NPArrayI = npt.NDArray[np.int32]
+
+import numpy.typing as npt
+
+NPArrayF = npt.NDArray[np.float64]
 
 
 class VTK_TRIANGLE_METRICS(enum.StrEnum):
@@ -186,15 +194,14 @@ def create_ugrid(
 
     if point_data is not None:
         for key, array in point_data.items():
-            vtk_point_array = numpy_to_vtk(array)
-            vtk_point_array.SetName(key)
-            _ = ugrid.GetPointData().AddArray(vtk_point_array)
+            ugrid.point_data[key] = array
+            # vtk_point_array = numpy_to_vtk(array)
+            # vtk_point_array.SetName(key)
+            # _ = ugrid.GetPointData().AddArray(vtk_point_array)
 
     if cell_data is not None:
         for key, array in cell_data.items():
-            vtk_cell_array = numpy_to_vtk(array)
-            vtk_cell_array.SetName(key)
-            _ = ugrid.GetCellData().AddArray(vtk_cell_array)
+            ugrid.cell_data[key] = array
 
     if field_data is not None:
         for key, value in field_data.items():
@@ -384,7 +391,7 @@ def calc_metric(ugrid: vtkUnstructuredGrid, metric: VTK_TRIANGLE_METRICS) -> NPA
 
     output = quality_filter.GetOutput()
     quality_array = output.GetCellData().GetArray("Quality")
-    quality_np = T.cast(NPArrayF, vtk_to_numpy(quality_array))  # pyright: ignore[reportUnknownArgumentType]
+    quality_np = vtk_to_numpy(quality_array)
 
     return quality_np
 
@@ -406,7 +413,7 @@ def calc_mesh_quality(
     )
     data = {r.kwargs["metric"]: r.result for r in results if r.kwargs is not None}
     df = pd.DataFrame(data)[list(metrics)]
-    return df.dropna()
+    return df  # .dropna()
 
 
 def calc_mesh_quality_single(
@@ -418,7 +425,7 @@ def calc_mesh_quality_single(
 
     data = {metric: calc_metric(ugrid, metric) for metric in tqdm(metrics)}
     df = pd.DataFrame(data)
-    return df.dropna()
+    return df  # .dropna()
 
 
 def reproject(
@@ -437,6 +444,94 @@ def reproject(
     _ = string_data.InsertNextValue(to_crs.to_wkt())
     ugrid.field_data.AddArray(string_data)
     return ugrid
+
+
+def filter_by_cell_types(ugrid: vtkUnstructuredGrid, cell_types: abc.Sequence[int] = (VTK_TRIANGLE,)):
+    extractor = vtkExtractCellsByType()
+    extractor.SetInputData(ugrid)
+    for cell_type in cell_types:
+        extractor.AddCellType(cell_type)
+    extractor.Update()
+    return extractor.GetOutput()
+
+
+@dataclasses.dataclass
+class UGrid:
+    ugrid: vtkUnstructuredGrid
+    nodes: np.ndarray
+    cell_types: np.ndarray
+    connectivity: np.ndarray
+    offsets: np.ndarray
+    no_line_segments: int
+    no_triangles: int
+    boundary_edges: np.ndarray
+    boundaries: list[list[int]] = dataclasses.field(repr=False)
+    triangles: np.ndarray
+
+    @classmethod
+    def from_file(cls, path: Path) -> T.Self:
+        ugrid = read(path)
+        return cls.from_vtk(ugrid)
+
+    @classmethod
+    def from_vtk(cls, ugrid: vtkUnstructuredGrid) -> T.Self:
+        import igraph
+
+        nodes = vtk_to_numpy(ugrid.GetPoints().GetData())
+        cell_types = vtk_to_numpy(ugrid.GetCellTypesArray())
+        connectivity = vtk_to_numpy(ugrid.GetCells().GetData())
+        offsets = vtk_to_numpy(ugrid.GetCellLocationsArray())
+        no_line_segments = len(np.nonzero(cell_types == VTK_LINE)[0])
+        no_triangles = len(np.nonzero(cell_types == VTK_TRIANGLE)[0])
+        boundary_edges = connectivity[: no_line_segments * 3].reshape(-1, 3)[:, 1:]
+        triangles = connectivity[no_line_segments * 3 :].reshape(-1, 4)[:, 1:]
+
+        if not len(boundary_edges):
+            boundary_edges = get_boundary_edges(triangles)
+
+        g = igraph.Graph()
+        g.add_vertices(np.unique(boundary_edges).astype(str))
+        g.add_edges(boundary_edges.astype(str))
+        boundaries = list(g.connected_components())
+
+        return cls(
+            ugrid=ugrid,
+            nodes=nodes,
+            cell_types=cell_types,
+            connectivity=connectivity,
+            offsets=offsets,
+            no_line_segments=no_line_segments,
+            no_triangles=no_triangles,
+            boundary_edges=boundary_edges,
+            boundaries=boundaries,
+            triangles=triangles,
+        )
+
+
+def to_gr3(
+    input: Path,
+    output: Path,
+    ignore_z: bool = True,
+    include_boundaries: bool = True,
+) -> None:
+    ugrid = UGrid.from_file(input)
+    # nodes = vtk_to_numpy(ugrid.GetPoints().GetData())
+    nodes = ugrid.nodes.copy()
+    if ignore_z:
+        nodes[:, 2] = np.zeros(len(nodes))
+
+    if "crs" in ugrid.ugrid.field_data.keys():
+        comment = ugrid.ugrid.field_data["crs"].GetValue(0)
+    else:
+        comment = "Generated by seamesh"
+
+    write_gr3(
+        output,
+        nodes=nodes,
+        elements=ugrid.triangles,
+        boundaries={1: ugrid.boundaries},
+        comment=comment,
+    )
 
 
 def gr3_to_vtu(

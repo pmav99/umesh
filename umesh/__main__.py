@@ -22,6 +22,32 @@ MultiParam = cyclopts.Parameter(
 
 
 @app.command()
+def to_gr3(
+    input: pathlib.Path,
+    output: pathlib.Path | None,
+    include_boundaries: bool = True,
+) -> None:
+    """
+    Save an unstructured grid file in VTU format.
+
+    Parameters
+    ----------
+    input:
+        Path to the input file.
+    output:
+        Path to the output `.vtu` file.
+    compression_type:
+        Compression algorithm to use.
+    compression_level:
+        Compression level to use.
+    data_mode:
+        Data mode to use
+
+    """
+    api.to_gr3(input, output, include_boundaries)
+
+
+@app.command()
 def to_vtu(
     input: pathlib.Path,
     output: pathlib.Path | None = None,
@@ -146,29 +172,22 @@ def clip(
     api.write_vtu(clipped, output)
 
 
-@gr3.command(name="to-vtu")
-def gr3_to_vtu(
+@app.command()
+def from_gr3(
     input: pathlib.Path,
     output: pathlib.Path,
     variable: str,
     include_boundaries: bool = True,
+    append: bool = False,
 ) -> None:
     """
     Convert a `gr3` mesh file to `vtu`
     """
     api.gr3_to_vtu(filename=input, output=output, variable=variable, include_boundaries=include_boundaries)
-
-
-@gr3.command(name="append-point-data")
-def gr3_append_point_data(
-    input: pathlib.Path,
-    output: pathlib.Path,
-    name: str,
-) -> None:
     """
     Parse a `gr3` mesh file and add its `Z` column to an existing `vtu` file as `point_data`.
     """
-    api.gr3_append_point_data(filename=input, output=output, variable=name)
+    api.gr3_append_point_data(filename=input, output=output, variable=variable)
 
 
 # @app.command()
